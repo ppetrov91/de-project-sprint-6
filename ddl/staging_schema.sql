@@ -38,9 +38,11 @@ CREATE TABLE IF NOT EXISTS STV202311139__STAGING.group_log (
      group_id int not null,
      user_id int not null,
      user_id_from int,
-     event VARCHAR(6) not null,
-     datetime timestamp not null,
-     CONSTRAINT group_logs_pk PRIMARY KEY(group_id, user_id, datetime)
+     event_name VARCHAR(6) not null,
+     event_ts timestamp not null,
+     CONSTRAINT group_logs_pk PRIMARY KEY(group_id, user_id, event_ts)
 )
-ORDER BY group_id, user_id, datetime
-SEGMENTED BY HASH(group_id, user_id, datetime) ALL NODES;
+ORDER BY group_id, user_id, event_ts
+SEGMENTED BY HASH(group_id, user_id, event_ts) ALL NODES
+PARTITION BY event_ts::date
+GROUP BY calendar_hierarchy_day(event_ts::date, 3, 2);

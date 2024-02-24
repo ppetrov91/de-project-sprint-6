@@ -37,7 +37,7 @@ PARTITION BY load_dt::date
 GROUP BY calendar_hierarchy_day(load_dt::date, 3, 2);
 
 CREATE TABLE IF NOT EXISTS STV202311139__DWH.l_user_group_activity (
-     hk_l_user_group_activity int not null primary key ,
+     hk_l_user_group_activity int not null primary key,
      hk_user_id int not null,
      hk_group_id int not null,
      load_dt timestamp not null,
@@ -95,17 +95,17 @@ GROUP BY calendar_hierarchy_day(load_dt::date, 3, 2);
 CREATE TABLE IF NOT EXISTS STV202311139__DWH.s_auth_history (
      hk_l_user_group_activity int not null,
      user_id_from int,
-     event varchar(6) not null,
+     event_name varchar(6) not null,
      event_dt timestamp not null,
      load_dt timestamp not null,
      load_src varchar(20) not null,
      CONSTRAINT sah_hk_l_uga_fk FOREIGN KEY (hk_l_user_group_activity) 
      REFERENCES STV202311139__DWH.l_user_group_activity(hk_l_user_group_activity)
 )
-order by load_dt
+order by event_dt
 SEGMENTED BY hk_l_user_group_activity all nodes
-PARTITION BY load_dt::date
-GROUP BY calendar_hierarchy_day(load_dt::date, 3, 2);
+PARTITION BY event_dt::date
+GROUP BY calendar_hierarchy_day(event_dt::date, 3, 2);
 
 CREATE TABLE IF NOT EXISTS STV202311139__DWH.s_user_socdem (
      hk_user_id int not null,

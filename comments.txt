@@ -1,0 +1,112 @@
+Здравствуйте, Светлана!
+
+Ниже приведены мои комментарии:
+
+1) В файле ddl/staging_schema.sql в таблице STV202311139__STAGING.group_log поле event было заменено на event_name, а datetime на event_ts.
+
+2) В файле dags/stg/sql/download_group_log.sql поправлена команда COPY из-за замены имён полей в таблице STV202311139__STAGING.group_log.
+
+3) В файле ddl/dds_schema.sql в таблице STV202311139__DWH.l_user_group_activity:
+
+     - Поле event переименовано на event_name.
+
+     - Сортировка теперь по полю event_dt.
+
+     - Добавлена клауза PARTITION BY event_dt::date.
+
+     - Добавлена клауза GROUP BY GROUP BY calendar_hierarchy_day(event_dt::date, 3, 2).
+
+
+4) В запросе dags/cdm/sql/oldest_groups_stats.sql event была заменён на event_name, поскольку в таблице STV202311139__DWH.l_user_group_activity поле event переименовано на event_name.
+
+5) Что касается наполнения таблицы l_user_group_activity, то новая версия представлена в dags/dds/sql/fill_l_user_group_activity.sql, но я с ней не согласен:
+
+     - Данная таблица является связующей, поэтому она должна связывать существующие объекты. Если делать запрос так:
+
+       SELECT DISTINCT HASH(u.hk_user_id, g.hk_group_id) AS hk_l_user_group_activity
+            , u.hk_user_id
+            , g.hk_group_id
+            , now() AS load_dt
+            , 's3' AS load_src
+         FROM STV202311139__STAGING.group_log gl
+         LEFT JOIN STV202311139__DWH.h_users u
+           ON u.user_id = gl.user_id
+         LEFT JOIN STV202311139__DWH.h_groups g
+           ON g.group_id = gl.group_id;
+
+      то в полях hk_user_id и hk_group_id могут быть NULL. Нет смысла связывать NULLы между собой.
+
+    - Если убрать EXISTS, то запрос лишится идемпотентности. Если я снова выполню запрос выше и попытаюсь добавить данные, то я получу строки-дубликаты или ошибку первичного ключа в случае его активации. 
+    
+      Таким образом, в dds будут ошибки, что недопустимо.
+
+    - Преподавателю я задавал вопросы выше, он сказал, что авторы написали так:
+
+      INSERT INTO DE8A13NOTRULEZ_GMAIL_COM__DWH.l_groups_dialogs(hk_l_groups_dialogs, hk_message_id,hk_group_id,load_dt,load_src)
+      select
+         hash(hd.hk_message_id,hg.hk_group_id),
+         hd.hk_message_id,
+         hg.hk_group_id,
+         now() as load_dt,
+         's3' as load_src
+      from DE8A13NOTRULEZ_GMAIL_COM__STAGING.dialogs as d
+      left join DE8A13NOTRULEZ_GMAIL_COM__DWH.h_groups as hg on d.message_group = hg.group_id
+      left join DE8A13NOTRULEZ_GMAIL_COM__DWH.h_dialogs as hd on d.message_id = hd.message_id
+      where hg.hk_group_id is not null 
+        and hd.message_id is not null 
+        and hash(hd.hk_message_id,hg.hk_group_id) not in (select hk_l_groups_dialogs from DE8A13NOTRULEZ_GMAIL_COM__DWH.l_groups_dialogs);
+
+      left join DE8A13NOTRULEZ_GMAIL_COM__DWH.h_groups as hg on d.message_group = hg.group_id и hg.hk_group_id is not null
+
+      равносильно
+
+      join DE8A13NOTRULEZ_GMAIL_COM__DWH.h_groups as hg on d.message_group = hg.group_id
+
+
+      left join DE8A13NOTRULEZ_GMAIL_COM__DWH.h_dialogs as hd on d.message_id = hd.message_id и hd.message_id is not null
+
+      равносильно
+
+      join DE8A13NOTRULEZ_GMAIL_COM__DWH.h_dialogs as hd on d.message_id = hd.message_id
+
+      
+      hash(hd.hk_message_id,hg.hk_group_id) not in (select hk_l_groups_dialogs from DE8A13NOTRULEZ_GMAIL_COM__DWH.l_groups_dialogs)
+
+      равносильно
+
+      not exists (select 1 from DE8A13NOTRULEZ_GMAIL_COM__DWH.l_groups_dialogs where hk_l_groups_dialogs = hash(hd.hk_message_id,hg.hk_group_id))
+
+
+      И это похоже на то, что написано в dags/dds/sql/fill_l_user_group_activity_old.sql
+
+      Поэтому предлагаемая рыба запроса, это не упрощение, а, по-моему мнению, внесение двух критических ошибок.
+
+6) Что касается наполнения таблицы s_auth_history.sql, то новая версия запроса представлена в dags/dds/sql/fill_s_auth_history.sql, но я с ней не согласен.
+
+   Если написать вот так:
+
+   INSERT INTO STV202311139__DWH.s_auth_history(hk_l_user_group_activity, user_id_from, event_name, event_dt, load_dt, load_src)
+   SELECT HASH(u.hk_user_id, g.hk_group_id) AS hk_l_user_group_activity
+        , gl.user_id_from
+        , gl.event_name 
+        , gl.event_ts AS event_dt
+        , now() AS load_dt
+        , 's3' AS load_src
+     FROM STV202311139__STAGING.group_log gl
+     LEFT JOIN STV202311139__DWH.h_users u
+       ON u.user_id = gl.user_id
+     LEFT JOIN STV202311139__DWH.h_groups g
+       ON g.group_id = gl.group_id;
+
+   - То hk_user_id и hk_group_id могут быть NULL, они здесь не нужны. Нам нужна информация о том, что такой-то пользователь в такой-то группе в такую-то временную отметку совершил такое-то действие.
+
+   - Запрос не является идемпотентным. Если я снова выполню запрос выше, то получу строки-дубликаты или ошибку первичного ключа в случае его активации. Таким образом, в dds будут ошибки, что недопустимо.
+
+   - Именно по этой причине LEFT JOIN заменены на JOIN и добавлен EXISTS по HASH(u.hk_user_id, g.hk_group_id) и event_ts, поскольку они здесь являются естественным ключом.
+
+     Запрос представлен в dags/dds/sql/fill_l_user_group_activity_old.sql
+
+     Поэтому предлагаемая рыба запроса, это не упрощение, а, по-моему мнению, внесение двух критических ошибок.
+
+Поэтому я не считаю что в пунктах 5 и 6 есть ошибки, тем более критические.
+ 

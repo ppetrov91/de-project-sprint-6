@@ -26,8 +26,8 @@ SELECT v.hk_group_id
           JOIN STV202311139__DWH.s_auth_history s
             ON s.hk_l_user_group_activity = ga.hk_l_user_group_activity
          GROUP BY s.hk_l_user_group_activity
-        HAVING COUNT(CASE WHEN s.event = 'add' THEN 1 END) > 0
-           AND COUNT(CASE WHEN s.event != 'add' THEN 1 END) = 0
+        HAVING COUNT(CASE WHEN s.event_name = 'add' THEN 1 END) > 0
+           AND COUNT(CASE WHEN s.event_name != 'add' THEN 1 END) = 0
        ) v
  GROUP BY v.hk_group_id
 )
