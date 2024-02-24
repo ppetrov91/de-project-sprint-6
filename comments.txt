@@ -107,7 +107,7 @@
 
    - Именно по этой причине LEFT JOIN заменены на JOIN и добавлен EXISTS по HASH(u.hk_user_id, g.hk_group_id) и event_ts, поскольку они здесь являются естественным ключом.
 
-     Запрос представлен в dags/dds/sql/fill_l_user_group_activity_old.sql
+     Запрос представлен в dags/dds/sql/fill_s_auth_history_old.sql
 
      Поэтому предлагаемая рыба запроса, это не упрощение, а, по-моему мнению, внесение двух критических ошибок.
 
